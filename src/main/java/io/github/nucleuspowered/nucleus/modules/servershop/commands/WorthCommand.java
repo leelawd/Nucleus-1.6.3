@@ -23,6 +23,8 @@ import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.command.args.CommandContext;
 import org.spongepowered.api.command.args.CommandElement;
 import org.spongepowered.api.command.args.GenericArguments;
+import org.spongepowered.api.data.type.HandTypes;
+import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.util.annotation.NonnullByDefault;
 
@@ -63,8 +65,11 @@ public class WorthCommand extends AbstractCommand<CommandSource> {
 
         StringBuilder stringBuilder = new StringBuilder();
 
+        Player player = (Player) src;
+        int quantity = player.getItemInHand(HandTypes.MAIN_HAND).get().getQuantity();
+
         if (buyPrice >= 0) {
-            stringBuilder.append(provider.getMessageWithFormat("command.worth.buy", this.econHelper.getCurrencySymbol(node.getServerBuyPrice())));
+            stringBuilder.append(provider.getMessageWithFormat("command.worth.buy", String.valueOf(quantity), this.econHelper.getCurrencySymbol(node.getServerBuyPrice() * quantity)));
         }
 
         if (sellPrice >= 0) {
@@ -72,7 +77,7 @@ public class WorthCommand extends AbstractCommand<CommandSource> {
                 stringBuilder.append(" - ");
             }
 
-            stringBuilder.append(provider.getMessageWithFormat("command.worth.sell", this.econHelper.getCurrencySymbol(node.getServerSellPrice())));
+            stringBuilder.append(provider.getMessageWithFormat("command.worth.sell", String.valueOf(quantity) , this.econHelper.getCurrencySymbol(node.getServerSellPrice() * quantity)));
         }
 
         if (stringBuilder.length() == 0) {
