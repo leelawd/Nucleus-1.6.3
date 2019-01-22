@@ -1,0 +1,370 @@
+plugins {
+    id 'idea'
+    id 'eclipse'
+    id 'com.github.hierynomus.license' version '0.12.1'
+    id 'ninja.miserable.blossom' version '1.0.1'
+ //   id 'maven'
+    id 'com.github.johnrengelman.shadow' version '1.2.3'
+    id 'java'
+    id 'org.spongepowered.plugin' version '0.9.0'
+}
+
+allprojects {
+    task gitHash {
+        def process = 'git rev-parse --short HEAD'.execute()
+        process.waitFor()
+        ext.hash = process.exitValue() ? 'unknown' : process.text.trim().replace('\n', '')
+    }
+
+    task gitCommitMessage(type: Exec) {
+        commandLine 'git', 'log', '-1', '--format=%B'
+        standardOutput = new ByteArrayOutputStream()
+        ext.message = {
+            standardOutput.toString().replaceAll('[\\r?\\n]+$', '')
+        }
+    }
+
+    apply plugin: 'java'
+}
+
+def apiVersion = '7.1.0'
+
+project.ext.versionno = '1.6.3'
+project.ext.minecraftversion = '1.12.2'
+project.ext.spongeapiversion = (apiVersion =~ /^\d+\.\d+/)[0]
+project.ext.suffix = ''
+project.ext.hash = ''
+
+String docVer
+boolean isSnapshot
+boolean isPR
+boolean isMajor
+
+if (project.properties.containsKey('override-doc-ver')) {
+    docVer = project.properties.get('override-doc-ver')
+    isSnapshot = false
+} else {
+    docVer = project.ext.versionno + "-S" + project.ext.spongeapiversion
+    isSnapshot = project.ext.suffix.endsWith('SNAPSHOT')
+    isPR = project.ext.suffix.contains('PR')
+    isMajor = project.ext.versionno.endsWith('.0')
+}
+
+// Add Git hash for unique version numbers, but only for non-snapshot versions
+if (project.ext.suffix != '') {
+    project.ext.hash = '-' + gitHash.hash
+}
+
+rootProject.version = project.versionno + project.suffix + '-S' + project.spongeapiversion
+if (isSnapshot && project.hasProperty("appendGit")) {
+    rootProject.version += '-' + gitHash.hash
+}
+
+project.ext.fileVersion = project.versionno + project.suffix + project.ext.hash + '-S' + project.spongeapiversion
+
+project(":nucleus-api") {
+    repositories {
+        jcenter()
+        maven {
+            name 'Sponge maven repo'
+            url 'https://repo.spongepowered.org/maven'
+        }
+    }
+
+    version = rootProject.versionno + rootProject.suffix + '-S' + rootProject.spongeapiversion
+
+    task javadocJar(type: Jar, dependsOn: javadoc) {
+        classifier = 'javadoc'
+        from javadoc.destinationDir
+        archiveName = "Nucleus-${version}-api-javadocs.jar"
+    }
+}
+
+if (!project.hasProperty("nosign")) {
+    apply plugin: 'signing'
+    apply plugin: 'org.spongepowered.plugin'
+    apply plugin: 'org.spongepowered.ore'
+}
+
+description = 'The Ultimate Essentials Plugin.'
+ext.url = 'http://nucleuspowered.org'
+
+group 'io.github.nucleuspowered'
+
+ext.spongeapi = apiVersion
+def qsmlDep = "uk.co.drnaylor:quickstart-moduleloader:0.11.0"
+def geoIpDep = 'com.maxmind.geoip2:geoip2:2.10.0'
+def neutrinoDep = 'io.github.nucleuspowered:neutrino:1.1.3'
+
+defaultTasks 'licenseFormat build'
+
+repositories {
+    jcenter()
+    maven {
+        name 'Sponge maven repo'
+        url 'http://repo.spongepowered.org/maven'
+    }
+    maven {
+        name 'drnaylor-minecraft'
+        url 'http://repo.drnaylor.co.uk/artifactory/list/minecraft'
+    }
+    maven {
+        name 'drnaylor'
+        url 'http://repo.drnaylor.co.uk/artifactory/list/quickstart'
+    }
+    maven {
+        url 'https://jitpack.io'
+    }
+}
+
+dependencies {
+    compile project(":nucleus-ap")
+    compile project(":nucleus-api", {
+        ext.versionno = versionno
+        ext.suffix = suffix
+    })
+    compile "org.spongepowered:spongeapi:" + project.ext.spongeapi
+    compile qsmlDep
+    compile neutrinoDep
+
+    // For Geo IP
+    compile geoIpDep
+
+    testCompile "junit:junit:4.12"
+    testCompile "org.mockito:mockito-all:1.10.19"
+    testCompile "org.powermock:powermock-module-junit4:1.6.4"
+    testCompile "org.powermock:powermock-api-mockito:1.6.4"
+    testCompile "org.hamcrest:hamcrest-junit:2.0.0.0"
+}
+
+license {
+    ext.name = project.name
+
+    exclude "**/*.info"
+    exclude "assets/**"
+    exclude "*.properties"
+    exclude "*.txt"
+
+    header file('HEADER.txt')
+    sourceSets = project.sourceSets
+
+    ignoreFailures false
+    strictCheck true
+
+    mapping {
+        java = 'SLASHSTAR_STYLE'
+    }
+}
+
+def getVersion = {
+    rootProject.version
+}
+
+blossom {
+    replaceTokenIn('src/main/java/io/github/nucleuspowered/nucleus/PluginInfo.java')
+    replaceToken '@name@', project.name
+    replaceToken '@version@', getVersion
+
+    replaceToken '@description@', project.description
+    replaceToken '@url@', project.url
+    replaceToken '@gitHash@', gitHash.hash
+}
+
+jar {
+    manifest {
+        attributes  'Implementation-Title': project.name,
+                'SpongeAPI-Version': project.spongeapi,
+                'Implementation-Version': getVersion(),
+                'Git-Hash': gitHash.hash
+    }
+
+    archiveName = getVersion
+}
+
+shadowJar {
+    dependencies {
+        include(project(":nucleus-api"))
+        include(dependency(qsmlDep))
+        include(dependency(geoIpDep))
+        include(dependency(neutrinoDep))
+        include(dependency("com.maxmind.db:maxmind-db"))
+        include(dependency("com.fasterxml.jackson.core:jackson-core"))
+        include(dependency("com.fasterxml.jackson.core:jackson-databind"))
+        include(dependency("com.fasterxml.jackson.core:jackson-annotations"))
+    }
+
+    relocate 'com.maxmind.geoip2', 'io.github.nucleuspowered.relocate.com.maxmind.geoip2'
+    relocate 'com.maxmind.db', 'io.github.nucleuspowered.relocate.com.maxmind.db'
+    relocate 'com.fasterxml.jackson', 'io.github.nucleuspowered.relocate.com.fasterxml.jackson'
+
+    if (!project.hasProperty('norelocate')) {
+        relocate 'uk.co.drnaylor', 'io.github.nucleuspowered.relocate.uk.co.drnaylor'
+        relocate 'io.github.nucleuspowered.neutrino', 'io.github.nucleuspowered.relocate.nucleus.neutrino'
+        relocate 'io.github.lukehutch', 'io.github.nucleuspowered.relocate.io.github.lukehutch'
+    }
+
+    exclude "io/github/nucleuspowered/nucleus/api/NucleusAPIMod.class"
+    archiveName = "Nucleus-${rootProject.version}-MC${project.ext.minecraftversion}-plugin.jar"
+    //shadowJar.archiveName = shadowName
+   // archiveName = "Nucleus-${version}-MC${project.ext.minecraftversion}-plugin.jar"
+}
+shadowJar.dependsOn(':nucleus-api:build')
+
+task cleanJars {
+    doLast {
+        project.file('output').listFiles().each {
+            x ->
+                if (x.name.endsWith("jar") || x.name.endsWith("asc") || x.name.endsWith("md")) {
+                    x.delete()
+                }
+        }
+    }
+}
+
+task copyJars(type: Copy, dependsOn: ':nucleus-api:build') {
+    from([project(":nucleus-api").jar, project(":nucleus-api").javadocJar, shadowJar])
+    into project.file('output')
+}
+
+artifacts {
+    archives shadowJar
+    shadow shadowJar
+}
+
+// Release notes
+task relnotes {
+    doLast {
+        String complete
+        if (isSnapshot) {
+            // read the snapshot.md file
+            String contents = new File('changelogs/templates/snapshot.md').getText("UTF-8")
+            complete = contents
+                    .replace('{{hash}}', gitHash.hash)
+                    .replace('{{message}}', gitCommitMessage.message())
+                    .replace('{{sponge}}', project.ext.spongeapiversion)
+        } else {
+            String contents
+            if (isPR) {
+                contents = new File('changelogs/templates/release-pr.md').getText("UTF-8")
+            } else if (isMajor) {
+                contents = new File('changelogs/templates/release-big.md').getText("UTF-8")
+            } else {
+                contents = new File('changelogs/templates/release.md').getText("UTF-8")
+            }
+
+            String notes = new File('changelogs/templates/' + docVer + ".md").getText("UTF-8")
+            complete = contents
+                    .replace('{{hash}}', gitHash.hash)
+                    .replace('{{info}}', notes)
+                    .replace('{{sponge}}', project.ext.spongeapiversion)
+        }
+
+        ext.notes = complete
+    }
+}
+
+task printRelNotes(dependsOn: relnotes) {
+    doLast {
+        println(relnotes.ext.notes)
+    }
+}
+
+task writeRelNotes(dependsOn: relnotes)  {
+    doLast {
+        new File("$projectDir/changelogs/${version}.md").text = relnotes.ext.notes
+    }
+}
+
+task writeRelNotesInOutput(dependsOn: relnotes)  {
+    doLast {
+        new File("$projectDir/output/${version}.md").text = relnotes.ext.notes
+    }
+}
+
+// SIGNING & ORE DEPLOY
+
+if (!project.hasProperty("nosign")) {
+    signing {
+        required {
+            project.properties.hasProperty("signing.keyId")
+        }
+
+        if (project.properties.containsKey('gpg2')) {
+            useGpgCmd() // requires gpg2
+        }
+
+        // sign configurations.archives
+        // we want to add the signatures to this configuration too, as this
+        // is what we use to upload to Ore
+        configuration=configurations.shadow
+        sign configurations.shadow
+    }
+
+    task signArchives(dependsOn: 'signShadow') {
+        // dummy task to make the ore deploy plugin work
+    }
+
+    task copyAsc(type: Copy, dependsOn: 'signArchives') {
+        from([signShadow.getSignatureFiles()])
+        into project.file('output')
+    }
+
+    task buildAndSign {
+        dependsOn 'build'
+        dependsOn 'signArchives'
+        dependsOn 'signShadow'
+        dependsOn 'copyAsc'
+    }
+
+    // needed because this is evaluated at runtime
+    task setChangelogOnDeploy(dependsOn: 'relnotes') {
+        doFirst {
+            oreDeploy.setChangelog(relnotes.ext.notes)
+        }
+    }
+
+    signArchives.dependsOn(shadowJar)
+    copyAsc.dependsOn(signArchives)
+    signShadow.dependsOn(shadowJar).mustRunAfter(shadowJar)
+    copyAsc.dependsOn(signShadow)
+    oreDeploy.dependsOn(setChangelogOnDeploy)
+    oreDeploy.dependsOn(buildAndSign)
+
+    oreDeploy.setRecommended(project.properties.containsKey("oreDeploy.recommended"))
+    if (project.properties.containsKey("oreDeploy.channel")) {
+        oreDeploy.setChannel(project.properties.get("oreDeploy.channel").toString())
+        oreDeploy.setForumPost(
+                !project.properties.getOrDefault("oreDeploy.post", "false")
+                        .toString()
+                        .equalsIgnoreCase("false")
+        )
+    } else if (project.properties.containsKey("oreDeploy.select")) {
+        if (isPR) {
+            oreDeploy.setChannel("prerelease")
+            oreDeploy.setForumPost(true)
+        } else if (isSnapshot) {
+            oreDeploy.setChannel("snapshot")
+            oreDeploy.setForumPost(false)
+        } else {
+            oreDeploy.setChannel("Release")
+            oreDeploy.setRecommended(true)
+            oreDeploy.setForumPost(true)
+        }
+    } else {
+        oreDeploy.setChannel("snapshot")
+        oreDeploy.setForumPost(false)
+    }
+
+    oreDeploy.setDeploy(project.configurations.shadow) // yet another hack
+
+}
+
+blossomSourceReplacementJava.dependsOn(gitHash)
+jar.dependsOn(gitHash)
+relnotes.dependsOn([gitHash, gitCommitMessage])
+compileJava.dependsOn(":nucleus-ap:build")
+clean.dependsOn(cleanJars)
+copyJars.mustRunAfter(cleanJars)
+build.dependsOn(shadowJar)
+build.dependsOn(copyJars)
+build.dependsOn(writeRelNotesInOutput)

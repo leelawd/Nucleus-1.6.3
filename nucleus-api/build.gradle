@@ -1,0 +1,84 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'eclipse'
+    id 'maven'
+}
+
+apply plugin: 'ninja.miserable.blossom'
+apply plugin: 'com.github.hierynomus.license'
+
+description = 'The Ultimate Essentials Plugin API.'
+ext.url = 'http://nucleuspowered.org'
+
+group 'io.github.nucleuspowered'
+
+defaultTasks 'licenseFormat build'
+
+repositories {
+    jcenter()
+    maven {
+        name 'Sponge maven repo'
+        url 'http://repo.spongepowered.org/maven'
+    }
+}
+
+dependencies {
+    compile "org.spongepowered:spongeapi:" + project.getRootProject().ext.spongeapi
+}
+
+license {
+    ext.name = project.getRootProject().name
+
+    exclude "**/*.info"
+    exclude "assets/**"
+    exclude "*.properties"
+    exclude "*.txt"
+
+    header file('../HEADER.txt')
+    sourceSets = project.sourceSets
+
+    ignoreFailures false
+    strictCheck true
+
+    mapping {
+        java = 'SLASHSTAR_STYLE'
+    }
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+def getRootVersion = {
+    rootProject.version
+}
+
+jar {
+    manifest {
+        attributes  'API-Title': project.name,
+                'Implementation-Title': rootProject.name,
+                'API-Version': project.version,
+                'SpongeAPI-Version': project.spongeapi,
+                'Implementation-Version': getRootVersion(),
+                'Git-Hash': gitHash.hash
+    }
+
+    archiveName = "Nucleus-${version}-api.jar"
+}
+
+artifacts {
+    archives javadocJar
+    archives jar
+    archives sourcesJar
+}
+
+blossom {
+    replaceTokenIn('src/main/java/io/github/nucleuspowered/nucleus/api/NucleusAPITokens.java')
+    replaceToken '@semver@', versionno
+    replaceToken '@release@', suffix
+    replaceToken '@version@', version
+    replaceToken '@description@', description
+    replaceToken '@gitHash@', gitHash.hash
+}
