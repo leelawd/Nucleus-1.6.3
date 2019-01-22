@@ -5,8 +5,6 @@
 package io.github.nucleuspowered.nucleus.modules.servershop.commands;
 
 import io.github.nucleuspowered.nucleus.Nucleus;
-import io.github.nucleuspowered.nucleus.Util;
-import io.github.nucleuspowered.nucleus.argumentparsers.ItemAliasArgument;
 import io.github.nucleuspowered.nucleus.configurate.datatypes.ItemDataNode;
 import io.github.nucleuspowered.nucleus.dataservices.ItemDataService;
 import io.github.nucleuspowered.nucleus.internal.EconHelper;
@@ -17,7 +15,6 @@ import io.github.nucleuspowered.nucleus.internal.command.AbstractCommand;
 import io.github.nucleuspowered.nucleus.internal.docgen.annotations.EssentialsEquivalent;
 import io.github.nucleuspowered.nucleus.internal.messages.MessageProvider;
 import io.github.nucleuspowered.nucleus.internal.permissions.SuggestedLevel;
-import org.spongepowered.api.CatalogType;
 import org.spongepowered.api.command.CommandResult;
 import org.spongepowered.api.command.CommandSource;
 import org.spongepowered.api.command.args.CommandContext;
@@ -42,17 +39,18 @@ public class WorthCommand extends AbstractCommand<CommandSource> {
     @Override
     public CommandElement[] getArguments() {
         return new CommandElement[] {
-            GenericArguments.optionalWeak(new ItemAliasArgument(Text.of(this.item)))
+            GenericArguments.optionalWeak(GenericArguments.string(Text.of(this.item)))
         };
     }
 
     @Override
     public CommandResult executeCommand(CommandSource src, CommandContext args) throws Exception {
-        CatalogType type = getCatalogTypeFromHandOrArgs(src, this.item, args);
-        String id = type.getId();
+        //CatalogType type = getCatalogTypeFromHandOrArgs(src, this.item, args);
+        //String id = type.getId();
+        String itemID = getItemIDFromHandOrArgs(src, this.item, args);
 
         // Get the item from the system.
-        ItemDataNode node = this.itemDataService.getDataForItem(id);
+        ItemDataNode node = this.itemDataService.getDataForItem(itemID);
 
         // Get the current item worth.
         MessageProvider provider = Nucleus.getNucleus().getMessageProvider();
@@ -81,9 +79,9 @@ public class WorthCommand extends AbstractCommand<CommandSource> {
         }
 
         if (stringBuilder.length() == 0) {
-            src.sendMessage(provider.getTextMessageWithFormat("command.worth.nothing", Util.getTranslatableIfPresentOnCatalogType(type)));
+            src.sendMessage(provider.getTextMessageWithFormat("command.worth.nothing", itemID));
         } else {
-            src.sendMessage(provider.getTextMessageWithFormat("command.worth.something", Util.getTranslatableIfPresentOnCatalogType(type), stringBuilder.toString()));
+            src.sendMessage(provider.getTextMessageWithFormat("command.worth.something", itemID, stringBuilder.toString()));
         }
 
         return CommandResult.success();
